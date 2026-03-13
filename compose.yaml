@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: platform
+      POSTGRES_DB: platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform -d platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://platform:platform@db:5432/platform
+      SECRET_KEY: dev-secret-key-change-me
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      BOOTSTRAP_ENABLED: "true"
+      BOOTSTRAP_TENANT_NAME: Demo MSP
+      BOOTSTRAP_TENANT_SLUG: demo-msp
+      BOOTSTRAP_OWNER_EMAIL: owner@demo-msp.com
+      BOOTSTRAP_OWNER_PASSWORD: ChangeMe123!
+      BOOTSTRAP_OWNER_FIRST_NAME: Platform
+      BOOTSTRAP_OWNER_LAST_NAME: Owner
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
