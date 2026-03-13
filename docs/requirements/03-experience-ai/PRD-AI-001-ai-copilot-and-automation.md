@@ -3,7 +3,7 @@ prd_id: PRD-AI-001
 title: AI Copilot and Automation Orchestration
 version: 1.0.0
 owner: AI Platform Team
-status: draft
+status: approved
 target_phase: phase-4
 date: 2026-03-12
 ---
@@ -138,7 +138,7 @@ MSPs need AI assistance and automation for speed, but unsafe retrieval and uncon
 
 ## Open Questions
 
-- Approved model provider mix and fallback strategy.
-- Default confidence threshold for action suggestions.
-- Policy for retaining AI prompts/outputs by tenant tier.
-
+- None. Resolved decisions:
+- Decision: Model strategy is Azure OpenAI primary with secondary provider failover through the platform model gateway and per-tenant policy controls.
+- Decision: Default confidence thresholds are >=0.70 for actionable suggestions and >=0.90 plus policy approval for automation auto-execution eligibility.
+- Decision: Prompt/output retention defaults to 30 days for standard tier, 90 days for enterprise tier, and 14 days metadata-only mode for regulated tier unless tenant policy overrides.

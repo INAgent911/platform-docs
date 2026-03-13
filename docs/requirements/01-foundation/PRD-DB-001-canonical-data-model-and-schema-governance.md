@@ -3,7 +3,7 @@ prd_id: PRD-DB-001
 title: Canonical Data Model and Schema Governance
 version: 1.0.0
 owner: Data Platform Team
-status: draft
+status: approved
 target_phase: phase-1
 date: 2026-03-12
 ---
@@ -154,6 +154,7 @@ The platform requires a canonical customer-centered data model and controlled sc
 
 ## Open Questions
 
-- Preferred representation for tenant extensions: JSONB-first vs generated typed columns.
-- Final canonical ontology for benchmarking dimensions.
-- Data residency partitioning model by region.
+- None. Resolved decisions:
+- Decision: Adopt JSONB-first tenant extensions with optional promotion of high-usage fields to typed columns via governed migrations.
+- Decision: Canonical benchmarking ontology dimensions are `industry`, `service_line`, `ticket_status_norm`, `priority_norm`, `alert_severity_norm`, `change_type_norm`, `contract_tier`, `asset_class`, `region`, and `customer_segment`.
+- Decision: Launch with US data residency by default and enforce tenant residency policy keys; add dedicated EU and AU regional data partitions in the next expansion phase.

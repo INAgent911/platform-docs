@@ -3,7 +3,7 @@ prd_id: PRD-UI-001
 title: UI Customization and Workspaces
 version: 1.0.0
 owner: Product Experience Team
-status: draft
+status: approved
 target_phase: phase-3
 date: 2026-03-12
 ---
@@ -142,7 +142,7 @@ MSP teams need role-optimized interfaces, but rigid UIs force inefficient workfl
 
 ## Open Questions
 
-- Accessibility baseline and design token governance policy.
-- Allowed extensibility scope for custom components in phase-3.
-- Default workspace templates by MSP persona.
-
+- None. Resolved decisions:
+- Decision: Accessibility baseline is WCAG 2.2 AA with semantic design tokens managed in a versioned central token registry.
+- Decision: Phase-3 custom component scope allows signed sandboxed components using approved APIs only; arbitrary outbound network calls are disallowed.
+- Decision: Default workspace templates are Dispatcher, NOC, Account Manager, Billing Operations, and Security Admin.

@@ -3,7 +3,7 @@ prd_id: PRD-BIL-001
 title: Usage Metering and Cost Transparency
 version: 1.0.0
 owner: Finance Platform Team
-status: draft
+status: approved
 target_phase: phase-5
 date: 2026-03-12
 ---
@@ -138,7 +138,7 @@ MSPs adopting AI and automation need transparent usage economics; without explai
 
 ## Open Questions
 
-- Freshness target for usage dashboard updates.
-- Default anomaly detection sensitivity by tenant tier.
-- Required retention period for detailed usage events.
-
+- None. Resolved decisions:
+- Decision: Usage dashboard freshness target is p95 <=5 minutes with hard maximum lag of 15 minutes.
+- Decision: Default anomaly sensitivity is standard tier +30% over 7-day baseline, growth tier +20%, enterprise tier +10% with hourly evaluation.
+- Decision: Detailed usage events are retained 25 months; monthly rollups are retained 7 years.

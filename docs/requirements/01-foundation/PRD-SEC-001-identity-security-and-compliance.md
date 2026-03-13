@@ -3,7 +3,7 @@ prd_id: PRD-SEC-001
 title: Identity, Access, Security, and Compliance
 version: 1.0.0
 owner: Security and Trust Team
-status: draft
+status: approved
 target_phase: phase-1
 date: 2026-03-12
 ---
@@ -154,6 +154,7 @@ The platform must provide enterprise-grade identity, tenant isolation, auditabil
 
 ## Open Questions
 
-- Mandatory MFA scope for non-privileged users.
-- Regional compliance expansion beyond SOC2/GDPR.
-- Required retention duration by log category.
+- None. Resolved decisions:
+- Decision: MFA is mandatory for all MSP internal users and customer admins; customer end users use risk-based step-up MFA by default.
+- Decision: Compliance roadmap beyond SOC2/GDPR is ISO 27001 control alignment first, HIPAA-ready controls second, and PCI-focused controls for billing integrations third.
+- Decision: Log retention defaults are auth/audit=7y, security events=2y hot + 5y cold, application logs=90d, traces=30d, debug logs=14d.

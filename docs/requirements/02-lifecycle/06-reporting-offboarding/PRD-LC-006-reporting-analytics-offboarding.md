@@ -3,7 +3,7 @@ prd_id: PRD-LC-006
 title: Reporting, Analytics, and Offboarding
 version: 1.0.0
 owner: Insights and Governance Team
-status: draft
+status: approved
 target_phase: phase-5
 date: 2026-03-12
 ---
@@ -138,6 +138,7 @@ MSPs need trustworthy reporting for SLA and business performance, plus controlle
 
 ## Open Questions
 
-- Default KPI catalog by service tier and persona.
-- Required offboarding evidence package for legal/compliance reviews.
-- Long-term archival strategy for former tenant data.
+- None. Resolved decisions:
+- Decision: Default KPI catalog includes executive KPIs (ARR, margin, churn, NRR), operations KPIs (SLA attainment, MTTR/MTTD, backlog), and finance KPIs (DSO, invoice accuracy, leakage) with tier-based depth.
+- Decision: Required offboarding evidence package includes deprovision checklist, access revocation logs, export manifest with hashes, deletion/retention certificate, final billing reconciliation, and signed approvals.
+- Decision: Former-tenant archival policy is operational data cold-archived for 13 months, financial/audit records retained 7 years, with GDPR erasure workflow and legal-hold override support.

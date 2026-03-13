@@ -3,7 +3,7 @@ prd_id: PRD-ENV-001
 title: Environment and Platform Foundation
 version: 1.0.0
 owner: Platform Architecture Team
-status: draft
+status: approved
 target_phase: phase-0
 date: 2026-03-12
 ---
@@ -153,6 +153,7 @@ The platform needs a reproducible baseline environment across local Docker and A
 
 ## Open Questions
 
-- Final CI provider and deployment orchestrator selection.
-- Required non-prod environment count beyond dev/test/staging.
-- Target RTO/RPO commitments for phase-0 and phase-1.
+- None. Resolved decisions:
+- Decision: Use GitHub Actions as CI/CD provider and Azure Bicep-driven deployments orchestrated from the pipeline.
+- Decision: Keep required non-prod environments as `dev`, `test`, and `staging`; allow ephemeral per-PR preview environments as optional and auto-expiring.
+- Decision: Set recovery targets to phase-0 RTO=8h/RPO=24h, phase-1 RTO=4h/RPO=4h.

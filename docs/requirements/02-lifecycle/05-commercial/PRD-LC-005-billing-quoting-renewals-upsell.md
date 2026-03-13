@@ -3,7 +3,7 @@ prd_id: PRD-LC-005
 title: Billing, Quoting, Renewals, and Upsell
 version: 1.0.0
 owner: Commercial Systems Team
-status: draft
+status: approved
 target_phase: phase-5
 date: 2026-03-12
 ---
@@ -138,6 +138,7 @@ Revenue leakage and poor forecasting occur when quote, contract, entitlement, in
 
 ## Open Questions
 
-- Supported tax jurisdictions and invoicing compliance scope.
-- Default renewal notice timeline by contract type.
-- Required forecasting accuracy threshold for phase-5.
+- None. Resolved decisions:
+- Decision: Supported initial tax/invoicing scope is US sales tax, Canada GST/HST, and UK VAT; EU VAT is scheduled next.
+- Decision: Renewal notice defaults are monthly contracts at 15/7/1 days, annual at 120/90/60/30 days, and multi-year at 180/120/90/60 days before renewal.
+- Decision: Forecasting accuracy target is monthly ARR forecast MAPE <=8% at portfolio level by end of phase-5 stabilization.

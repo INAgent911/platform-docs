@@ -3,7 +3,7 @@ prd_id: PRD-OPS-001
 title: API, Event, and Integration Standards
 version: 1.0.0
 owner: Platform Integration Team
-status: draft
+status: approved
 target_phase: phase-1
 date: 2026-03-12
 ---
@@ -150,7 +150,7 @@ The platform requires a consistent API and event model to connect CRM/PSA/RMM/CM
 
 ## Open Questions
 
-- Priority list for first-party connectors in phase-1 and phase-2.
-- Final API rate-limiting policy per tenant and partner tier.
-- Event retention period by severity/class.
-
+- None. Resolved decisions:
+- Decision: First-party connector priority is phase-1: Entra ID/Microsoft Graph, Exchange mail ingestion, Teams notifications, generic webhooks; phase-2: SharePoint, QuickBooks/Xero, and major PSA/RMM adapters.
+- Decision: API rate limits are tenant default read=1200 req/min, write=300 req/min, burst=2x for 30s; partner tiers: standard=60 req/s, premium=180 req/s.
+- Decision: Event retention policy is info=30d, warning=90d, error/critical=365d, security/audit=7y.

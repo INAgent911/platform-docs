@@ -3,7 +3,7 @@ prd_id: PRD-LC-004
 title: Ticketing, Incident, and Change Operations
 version: 1.0.0
 owner: Service Operations Team
-status: draft
+status: approved
 target_phase: phase-4
 date: 2026-03-12
 ---
@@ -138,7 +138,7 @@ Without disciplined incident and change workflows, MSP operations suffer higher 
 
 ## Open Questions
 
-- Default priority matrix and SLA tiers.
-- Required CAB workflow depth by tenant tier.
-- Target incident communication intervals for customer-facing updates.
-
+- None. Resolved decisions:
+- Decision: Default SLA matrix is P1 response=15m resolve=4h, P2 response=30m resolve=8h, P3 response=4h resolve=2 business days, P4 response=1 business day resolve=5 business days.
+- Decision: CAB depth is standard tier single approver for low-risk changes, regulated/enterprise tier quorum of 3 approvers (change, security, customer rep) for high-risk changes, emergency changes require post-implementation review within 24h.
+- Decision: Incident customer communications follow P1 every 30m, P2 hourly, P3 every 4h, P4 daily or on major status change.

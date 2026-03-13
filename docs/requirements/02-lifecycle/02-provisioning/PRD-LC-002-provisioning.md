@@ -3,7 +3,7 @@ prd_id: PRD-LC-002
 title: Provisioning
 version: 1.0.0
 owner: Customer Lifecycle Team
-status: draft
+status: approved
 target_phase: phase-2
 date: 2026-03-12
 ---
@@ -138,7 +138,7 @@ Provisioning failures create service delays, misconfiguration risk, and repeated
 
 ## Open Questions
 
-- Approval policy defaults for standard vs privileged provisioning.
-- Target provisioning completion SLA by service tier.
-- Required rollback depth per provisioning step.
-
+- None. Resolved decisions:
+- Decision: Standard catalog provisioning is auto-approved; privileged provisioning requires dual approval (security approver plus tenant owner/admin).
+- Decision: Provisioning SLA targets are standard activation <=4 business hours, complex bundle <=1 business day, endpoint rollout 95% complete <=24 hours.
+- Decision: Rollback depth must support per-step compensation plus full workflow rollback to last known good state when feasible.

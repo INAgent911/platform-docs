@@ -3,7 +3,7 @@ prd_id: PRD-LC-001
 title: Discovery and Onboarding
 version: 1.0.0
 owner: Customer Lifecycle Team
-status: draft
+status: approved
 target_phase: phase-2
 date: 2026-03-12
 ---
@@ -138,7 +138,7 @@ MSP onboarding is often inconsistent and manual, causing delayed value realizati
 
 ## Open Questions
 
-- Exact onboarding SLA targets by customer segment.
-- Required template variants by industry tier.
-- Customer-facing vs internal-only onboarding artifacts.
-
+- None. Resolved decisions:
+- Decision: Onboarding SLA targets are SMB (<=100 endpoints)=10 business days, Mid-market (101-1000)=20 business days, Enterprise (>1000)=45 business days.
+- Decision: Required onboarding template variants are Core, Regulated (healthcare/finance), Public Sector, and Co-managed IT.
+- Decision: Customer-facing artifacts include milestone status/approvals/timelines; internal-only artifacts include credential details, security findings, and escalation notes.

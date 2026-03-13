@@ -3,7 +3,7 @@ prd_id: PRD-LC-003
 title: Service Delivery, Monitoring, and Alerting
 version: 1.0.0
 owner: Service Operations Team
-status: draft
+status: approved
 target_phase: phase-3
 date: 2026-03-12
 ---
@@ -138,7 +138,7 @@ Service quality degrades when delivery workflows, telemetry, and proactive alert
 
 ## Open Questions
 
-- Initial default thresholds and suppression policies by service class.
-- Required on-call escalation policy integration.
-- Customer-facing notification cadence standards.
-
+- None. Resolved decisions:
+- Decision: Default alert policy uses per-service baselines with dedup window=15m, correlation window=5m, and flapping suppression=30m; critical infra defaults include CPU>95%/10m, memory>95%/10m, disk>90%/15m.
+- Decision: On-call escalation integrates PagerDuty as primary and Microsoft Teams as secondary collaboration channel.
+- Decision: Customer update cadence is Sev1 every 30m, Sev2 hourly, Sev3 every 4h, Sev4 on status change plus daily summary.
