@@ -7,6 +7,7 @@ from app.deps import require_permission
 from app.models import Runbook, User
 from app.schemas import RunbookCreate, RunbookOut
 from app.services.audit import log_audit_event
+from app.services.usage import log_usage_event
 
 router = APIRouter()
 
@@ -54,6 +55,12 @@ def create_runbook(
     )
     db.add(runbook)
     db.flush()
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="runbook.create",
+    )
     log_audit_event(
         db,
         tenant_id=current_user.tenant_id,

@@ -8,6 +8,8 @@ from app.models import Customer, Ticket, TicketStatus, User
 from app.schemas import TicketCreate, TicketOut, TicketSlaOut, TicketUpdate
 from app.services.audit import log_audit_event
 from app.services.operations import apply_ticket_sla, apply_ticket_status_markers, ticket_sla_state, utc_now
+from app.services.reference_validation import validate_asset_links
+from app.services.usage import log_usage_event
 
 router = APIRouter()
 
@@ -38,18 +40,32 @@ def create_ticket(
         )
         if customer is None:
             raise HTTPException(status_code=400, detail="Invalid customer for this tenant")
+    validate_asset_links(
+        db,
+        tenant_id=current_user.tenant_id,
+        config_item_id=payload.config_item_id,
+        contract_id=payload.contract_id,
+    )
 
     ticket = Ticket(
         tenant_id=current_user.tenant_id,
         title=payload.title,
         description=payload.description,
         customer_id=payload.customer_id,
+        config_item_id=payload.config_item_id,
+        contract_id=payload.contract_id,
         priority=payload.priority,
     )
     apply_ticket_sla(ticket, base_time=utc_now())
     apply_ticket_status_markers(ticket)
     db.add(ticket)
     db.flush()
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="ticket.create",
+    )
     log_audit_event(
         db,
         tenant_id=current_user.tenant_id,
@@ -83,6 +99,8 @@ def update_ticket(
         if customer is None:
             raise HTTPException(status_code=400, detail="Invalid customer for this tenant")
         ticket.customer_id = payload.customer_id
+    if payload.customer_id is None and "customer_id" in payload.model_fields_set:
+        ticket.customer_id = None
 
     if payload.title is not None:
         ticket.title = payload.title
@@ -93,6 +111,17 @@ def update_ticket(
     if payload.priority is not None:
         ticket.priority = payload.priority
         apply_ticket_sla(ticket, base_time=ticket.created_at or utc_now())
+    if payload.config_item_id is not None or payload.contract_id is not None:
+        validate_asset_links(
+            db,
+            tenant_id=current_user.tenant_id,
+            config_item_id=payload.config_item_id,
+            contract_id=payload.contract_id,
+        )
+        if "config_item_id" in payload.model_fields_set:
+            ticket.config_item_id = payload.config_item_id
+        if "contract_id" in payload.model_fields_set:
+            ticket.contract_id = payload.contract_id
 
     apply_ticket_status_markers(ticket)
     state = ticket_sla_state(ticket)
@@ -107,6 +136,12 @@ def update_ticket(
         resource_type="ticket",
         resource_id=ticket.id,
         event_data={"status": ticket.status.value, "priority": ticket.priority.value, "sla": state},
+    )
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="ticket.update",
     )
     db.commit()
     db.refresh(ticket)

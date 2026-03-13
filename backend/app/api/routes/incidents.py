@@ -13,6 +13,8 @@ from app.services.operations import (
     sync_incident_communication_due,
     utc_now,
 )
+from app.services.reference_validation import validate_asset_links
+from app.services.usage import log_usage_event
 
 router = APIRouter()
 
@@ -52,11 +54,19 @@ def create_incident(
         )
         if customer is None:
             raise HTTPException(status_code=400, detail="Invalid customer reference")
+    validate_asset_links(
+        db,
+        tenant_id=current_user.tenant_id,
+        config_item_id=payload.config_item_id,
+        contract_id=payload.contract_id,
+    )
 
     incident = Incident(
         tenant_id=current_user.tenant_id,
         ticket_id=payload.ticket_id,
         customer_id=payload.customer_id,
+        config_item_id=payload.config_item_id,
+        contract_id=payload.contract_id,
         title=payload.title,
         summary=payload.summary,
         severity=payload.severity,
@@ -71,6 +81,12 @@ def create_incident(
     sync_incident_communication_due(incident, now=utc_now())
     db.add(incident)
     db.flush()
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="incident.create",
+    )
     log_audit_event(
         db,
         tenant_id=current_user.tenant_id,
@@ -114,6 +130,17 @@ def update_incident(
         incident.assigned_user_id = payload.assigned_user_id
     if payload.communication_interval_minutes is not None:
         incident.communication_interval_minutes = payload.communication_interval_minutes
+    if payload.config_item_id is not None or payload.contract_id is not None:
+        validate_asset_links(
+            db,
+            tenant_id=current_user.tenant_id,
+            config_item_id=payload.config_item_id,
+            contract_id=payload.contract_id,
+        )
+        if "config_item_id" in payload.model_fields_set:
+            incident.config_item_id = payload.config_item_id
+        if "contract_id" in payload.model_fields_set:
+            incident.contract_id = payload.contract_id
     apply_incident_status_markers(incident)
     sync_incident_communication_due(incident, now=utc_now())
 
@@ -125,6 +152,12 @@ def update_incident(
         resource_type="incident",
         resource_id=incident.id,
         event_data=payload.model_dump(exclude_none=True, mode="json"),
+    )
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="incident.update",
     )
     db.commit()
     db.refresh(incident)
@@ -162,6 +195,12 @@ def log_incident_communication(
             if incident.next_communication_due_at
             else None,
         },
+    )
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="incident.communication",
     )
     db.commit()
     db.refresh(incident)

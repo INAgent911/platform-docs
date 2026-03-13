@@ -74,6 +74,14 @@ export default function DashboardPage() {
   const [changeRunbookId, setChangeRunbookId] = useState("");
   const [runbookName, setRunbookName] = useState("");
   const [runbookAuto, setRunbookAuto] = useState("no");
+  const [provisioningJobs, setProvisioningJobs] = useState([]);
+  const [workflowTemplates, setWorkflowTemplates] = useState([]);
+  const [opsReport, setOpsReport] = useState(null);
+  const [usageReport, setUsageReport] = useState(null);
+  const [aiQuery, setAiQuery] = useState("email outage authentication errors");
+  const [aiResult, setAiResult] = useState(null);
+  const [uiThemeMode, setUiThemeMode] = useState("light");
+  const [uiPrimaryColor, setUiPrimaryColor] = useState("#0b5fff");
   const [schemaYaml, setSchemaYaml] = useState(defaultSchemaYaml);
   const [schemaResult, setSchemaResult] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -121,6 +129,24 @@ export default function DashboardPage() {
       setUsers(usersResp.data);
       setPermissions(permsResp.data);
       setManifests(manifestsResp.data);
+      try {
+        const [provResp, templateResp, opsResp, usageResp, uiResp] = await Promise.all([
+          api.get("/provisioning"),
+          api.get("/workflows/templates"),
+          api.get("/reports/operations"),
+          api.get("/reports/usage"),
+          api.get("/ui/settings"),
+        ]);
+        setProvisioningJobs(provResp.data);
+        setWorkflowTemplates(templateResp.data);
+        setOpsReport(opsResp.data);
+        setUsageReport(usageResp.data);
+        setUiThemeMode(uiResp.data.theme_mode);
+        setUiPrimaryColor(uiResp.data.primary_color);
+      } catch {
+        setProvisioningJobs([]);
+        setWorkflowTemplates([]);
+      }
     }
   };
 

@@ -49,6 +49,23 @@ class Tenant(Base):
     change_requests: Mapped[list["ChangeRequest"]] = relationship(
         back_populates="tenant", cascade="all, delete-orphan"
     )
+    provisioning_jobs: Mapped[list["ProvisioningJob"]] = relationship(
+        back_populates="tenant", cascade="all, delete-orphan"
+    )
+    ui_settings: Mapped["TenantUiSettings"] = relationship(
+        back_populates="tenant", cascade="all, delete-orphan", uselist=False
+    )
+    workspace_views: Mapped[list["WorkspaceView"]] = relationship(
+        back_populates="tenant", cascade="all, delete-orphan"
+    )
+    config_items: Mapped[list["ConfigItem"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    service_contracts: Mapped[list["ServiceContract"]] = relationship(
+        back_populates="tenant", cascade="all, delete-orphan"
+    )
+    knowledge_articles: Mapped[list["KnowledgeArticle"]] = relationship(
+        back_populates="tenant", cascade="all, delete-orphan"
+    )
+    usage_events: Mapped[list["UsageEvent"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     runbooks: Mapped[list["Runbook"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     schema_manifests: Mapped[list["SchemaManifest"]] = relationship(
         back_populates="tenant", cascade="all, delete-orphan"
@@ -114,6 +131,8 @@ class Ticket(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     customer_id: Mapped[str | None] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
+    config_item_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    contract_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text(), nullable=True)
     status: Mapped[TicketStatus] = mapped_column(Enum(TicketStatus), nullable=False, default=TicketStatus.NEW)
@@ -276,6 +295,8 @@ class Incident(Base):
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     ticket_id: Mapped[str | None] = mapped_column(ForeignKey("tickets.id"), nullable=True, index=True)
     customer_id: Mapped[str | None] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
+    config_item_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    contract_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     summary: Mapped[str | None] = mapped_column(Text(), nullable=True)
     status: Mapped[IncidentStatus] = mapped_column(Enum(IncidentStatus), nullable=False, default=IncidentStatus.OPEN)
@@ -346,6 +367,8 @@ class ChangeRequest(Base):
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     incident_id: Mapped[str | None] = mapped_column(ForeignKey("incidents.id"), nullable=True, index=True)
     ticket_id: Mapped[str | None] = mapped_column(ForeignKey("tickets.id"), nullable=True, index=True)
+    config_item_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    contract_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text(), nullable=True)
     change_type: Mapped[ChangeType] = mapped_column(Enum(ChangeType), nullable=False, default=ChangeType.NORMAL)
@@ -371,3 +394,147 @@ class ChangeRequest(Base):
     incident: Mapped[Incident | None] = relationship(back_populates="change_requests")
     ticket: Mapped[Ticket | None] = relationship(back_populates="change_requests")
     runbook: Mapped[Runbook | None] = relationship(back_populates="change_requests")
+
+
+class ProvisioningStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class ProvisioningJob(Base):
+    __tablename__ = "provisioning_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    requested_by_user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    package_name: Mapped[str] = mapped_column(String(120), nullable=False, default="core")
+    allowed_first_user_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[ProvisioningStatus] = mapped_column(
+        Enum(ProvisioningStatus), nullable=False, default=ProvisioningStatus.QUEUED
+    )
+    steps: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    error_message: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="provisioning_jobs")
+
+
+class ThemeMode(StrEnum):
+    LIGHT = "light"
+    DARK = "dark"
+
+
+class TenantUiSettings(Base):
+    __tablename__ = "tenant_ui_settings"
+    __table_args__ = (UniqueConstraint("tenant_id", name="uq_tenant_ui_settings"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    theme_mode: Mapped[ThemeMode] = mapped_column(Enum(ThemeMode), nullable=False, default=ThemeMode.LIGHT)
+    brand_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    primary_color: Mapped[str] = mapped_column(String(20), nullable=False, default="#0b5fff")
+    secondary_color: Mapped[str] = mapped_column(String(20), nullable=False, default="#00a389")
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    updated_by_user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    tenant: Mapped[Tenant] = relationship(back_populates="ui_settings")
+
+
+class WorkspaceView(Base):
+    __tablename__ = "workspace_views"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", "version", name="uq_workspace_view"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    role_scope: Mapped[str] = mapped_column(String(40), nullable=False, default="user")
+    layout: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    version: Mapped[int] = mapped_column(Integer(), nullable=False, default=1)
+    active: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=True)
+    created_by_user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="workspace_views")
+
+
+class ConfigItem(Base):
+    __tablename__ = "config_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    item_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    environment: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    criticality: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="config_items")
+
+
+class ServiceContract(Base):
+    __tablename__ = "service_contracts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    contract_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    customer_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    sla_tier: Mapped[str] = mapped_column(String(80), nullable=False, default="standard")
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="service_contracts")
+
+
+class KnowledgeArticle(Base):
+    __tablename__ = "knowledge_articles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text(), nullable=False)
+    tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    known_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    created_by_user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="knowledge_articles")
+
+
+class EntityKnowledgeLink(Base):
+    __tablename__ = "entity_knowledge_links"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "entity_type", "entity_id", "article_id", name="uq_entity_knowledge_link"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    article_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_articles.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_by_user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class UsageEvent(Base):
+    __tablename__ = "usage_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    actor_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    units: Mapped[int] = mapped_column(Integer(), nullable=False, default=1)
+    cost_estimate_usd_micros: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    event_metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="usage_events")

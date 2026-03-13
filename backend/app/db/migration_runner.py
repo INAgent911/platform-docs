@@ -15,6 +15,15 @@ ROLE_PERMISSION_SEED: dict[UserRole, set[str]] = {
         "incident.manage",
         "change.manage",
         "change.approve",
+        "provisioning.manage",
+        "ui.manage",
+        "asset.manage",
+        "asset.read",
+        "knowledge.manage",
+        "knowledge.read",
+        "ai.assist",
+        "workflow.execute",
+        "reports.read",
         "customer.manage",
         "ticket.manage",
         "event.ingest",
@@ -26,11 +35,29 @@ ROLE_PERMISSION_SEED: dict[UserRole, set[str]] = {
         "incident.manage",
         "change.manage",
         "change.approve",
+        "provisioning.manage",
+        "ui.manage",
+        "asset.manage",
+        "asset.read",
+        "knowledge.manage",
+        "knowledge.read",
+        "ai.assist",
+        "workflow.execute",
+        "reports.read",
         "customer.manage",
         "ticket.manage",
         "event.ingest",
     },
-    UserRole.USER: {"customer.read", "ticket.manage", "event.ingest", "incident.read", "change.read"},
+    UserRole.USER: {
+        "customer.read",
+        "ticket.manage",
+        "event.ingest",
+        "incident.read",
+        "change.read",
+        "asset.read",
+        "knowledge.read",
+        "ai.assist",
+    },
 }
 
 
@@ -306,6 +333,185 @@ def _migration_add_ops_sla_and_runbooks(conn: Connection) -> None:
     )
 
 
+def _migration_expand_platform_slices(conn: Connection) -> None:
+    _add_column_if_missing(
+        conn,
+        table_name="tickets",
+        column_name="config_item_id",
+        postgres_sql="ALTER TABLE tickets ADD COLUMN IF NOT EXISTS config_item_id VARCHAR(36)",
+        other_sql="ALTER TABLE tickets ADD COLUMN config_item_id VARCHAR(36)",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="tickets",
+        column_name="contract_id",
+        postgres_sql="ALTER TABLE tickets ADD COLUMN IF NOT EXISTS contract_id VARCHAR(36)",
+        other_sql="ALTER TABLE tickets ADD COLUMN contract_id VARCHAR(36)",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="incidents",
+        column_name="config_item_id",
+        postgres_sql="ALTER TABLE incidents ADD COLUMN IF NOT EXISTS config_item_id VARCHAR(36)",
+        other_sql="ALTER TABLE incidents ADD COLUMN config_item_id VARCHAR(36)",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="incidents",
+        column_name="contract_id",
+        postgres_sql="ALTER TABLE incidents ADD COLUMN IF NOT EXISTS contract_id VARCHAR(36)",
+        other_sql="ALTER TABLE incidents ADD COLUMN contract_id VARCHAR(36)",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="change_requests",
+        column_name="config_item_id",
+        postgres_sql="ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS config_item_id VARCHAR(36)",
+        other_sql="ALTER TABLE change_requests ADD COLUMN config_item_id VARCHAR(36)",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="change_requests",
+        column_name="contract_id",
+        postgres_sql="ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS contract_id VARCHAR(36)",
+        other_sql="ALTER TABLE change_requests ADD COLUMN contract_id VARCHAR(36)",
+    )
+
+    conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS provisioning_jobs (
+                id VARCHAR(36) PRIMARY KEY,
+                tenant_id VARCHAR(36) NOT NULL,
+                requested_by_user_id VARCHAR(36) NOT NULL,
+                package_name VARCHAR(120) NOT NULL DEFAULT 'core',
+                allowed_first_user_email VARCHAR(255) NULL,
+                status VARCHAR(40) NOT NULL DEFAULT 'QUEUED',
+                steps JSON NOT NULL DEFAULT '[]',
+                error_message TEXT NULL,
+                started_at TIMESTAMP NULL,
+                completed_at TIMESTAMP NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_ui_settings (
+                id VARCHAR(36) PRIMARY KEY,
+                tenant_id VARCHAR(36) NOT NULL UNIQUE,
+                theme_mode VARCHAR(20) NOT NULL DEFAULT 'LIGHT',
+                brand_name VARCHAR(120) NULL,
+                primary_color VARCHAR(20) NOT NULL DEFAULT '#0b5fff',
+                secondary_color VARCHAR(20) NOT NULL DEFAULT '#00a389',
+                logo_url VARCHAR(500) NULL,
+                updated_by_user_id VARCHAR(36) NOT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS workspace_views (
+                id VARCHAR(36) PRIMARY KEY,
+                tenant_id VARCHAR(36) NOT NULL,
+                name VARCHAR(120) NOT NULL,
+                role_scope VARCHAR(40) NOT NULL,
+                layout JSON NOT NULL DEFAULT '{}',
+                version INTEGER NOT NULL DEFAULT 1,
+                active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_by_user_id VARCHAR(36) NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS config_items (
+                id VARCHAR(36) PRIMARY KEY,
+                tenant_id VARCHAR(36) NOT NULL,
+                name VARCHAR(120) NOT NULL,
+                item_type VARCHAR(80) NOT NULL,
+                environment VARCHAR(80) NULL,
+                criticality VARCHAR(40) NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS service_contracts (
+                id VARCHAR(36) PRIMARY KEY,
+                tenant_id VARCHAR(36) NOT NULL,
+                contract_code VARCHAR(80) NOT NULL,
+                customer_name VARCHAR(255) NOT NULL,
+                sla_tier VARCHAR(80) NOT NULL,
+                starts_at TIMESTAMP NULL,
+                ends_at TIMESTAMP NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_articles (
+                id VARCHAR(36) PRIMARY KEY,
+                tenant_id VARCHAR(36) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                body TEXT NOT NULL,
+                tags JSON NOT NULL DEFAULT '[]',
+                known_error_code VARCHAR(80) NULL,
+                created_by_user_id VARCHAR(36) NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS entity_knowledge_links (
+                id VARCHAR(36) PRIMARY KEY,
+                tenant_id VARCHAR(36) NOT NULL,
+                entity_type VARCHAR(40) NOT NULL,
+                entity_id VARCHAR(36) NOT NULL,
+                article_id VARCHAR(36) NOT NULL,
+                created_by_user_id VARCHAR(36) NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS usage_events (
+                id VARCHAR(36) PRIMARY KEY,
+                tenant_id VARCHAR(36) NOT NULL,
+                actor_user_id VARCHAR(36) NULL,
+                event_type VARCHAR(80) NOT NULL,
+                units INTEGER NOT NULL DEFAULT 1,
+                cost_estimate_usd_micros INTEGER NOT NULL DEFAULT 0,
+                event_metadata JSON NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+
+    _migration_seed_role_permissions(conn)
+
+
 MIGRATIONS: list[Migration] = [
     Migration(
         version="20260313_001_add_mfa_column",
@@ -326,6 +532,11 @@ MIGRATIONS: list[Migration] = [
         version="20260313_004_ops_sla_and_runbooks",
         description="Add SLA fields and runbook automation schema",
         apply_fn=_migration_add_ops_sla_and_runbooks,
+    ),
+    Migration(
+        version="20260313_005_expand_platform_slices",
+        description="Add provisioning, UI, assets, knowledge, and metering schema",
+        apply_fn=_migration_expand_platform_slices,
     ),
 ]
 

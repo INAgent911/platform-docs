@@ -15,6 +15,8 @@ from app.schemas import (
     ChangeRequestUpdate,
 )
 from app.services.audit import log_audit_event
+from app.services.reference_validation import validate_asset_links
+from app.services.usage import log_usage_event
 
 router = APIRouter()
 
@@ -93,6 +95,12 @@ def create_change(
         if incident is None:
             raise HTTPException(status_code=400, detail="Invalid incident reference")
     runbook = _get_runbook(db, current_user, payload.runbook_id)
+    validate_asset_links(
+        db,
+        tenant_id=current_user.tenant_id,
+        config_item_id=payload.config_item_id,
+        contract_id=payload.contract_id,
+    )
     _validate_change_policy(
         change_type=payload.change_type,
         risk_score=payload.risk_score,
@@ -104,6 +112,8 @@ def create_change(
         tenant_id=current_user.tenant_id,
         incident_id=payload.incident_id,
         ticket_id=payload.ticket_id,
+        config_item_id=payload.config_item_id,
+        contract_id=payload.contract_id,
         title=payload.title,
         description=payload.description,
         change_type=payload.change_type,
@@ -118,6 +128,12 @@ def create_change(
     )
     db.add(change)
     db.flush()
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="change.create",
+    )
     log_audit_event(
         db,
         tenant_id=current_user.tenant_id,
@@ -161,6 +177,26 @@ def update_change(
         change.risk_score = payload.risk_score
     if payload.rollback_plan is not None:
         change.rollback_plan = payload.rollback_plan
+    if payload.incident_id is not None:
+        incident = db.scalar(
+            select(Incident).where(
+                Incident.id == payload.incident_id,
+                Incident.tenant_id == current_user.tenant_id,
+            )
+        )
+        if incident is None:
+            raise HTTPException(status_code=400, detail="Invalid incident reference")
+        change.incident_id = payload.incident_id
+    if payload.ticket_id is not None:
+        ticket = db.scalar(
+            select(Ticket).where(
+                Ticket.id == payload.ticket_id,
+                Ticket.tenant_id == current_user.tenant_id,
+            )
+        )
+        if ticket is None:
+            raise HTTPException(status_code=400, detail="Invalid ticket reference")
+        change.ticket_id = payload.ticket_id
     if payload.scheduled_start_at is not None:
         change.scheduled_start_at = payload.scheduled_start_at
     if payload.scheduled_end_at is not None:
@@ -183,6 +219,17 @@ def update_change(
             rollback_plan=payload.rollback_plan if payload.rollback_plan is not None else change.rollback_plan,
             runbook=change.runbook,
         )
+    if payload.config_item_id is not None or payload.contract_id is not None:
+        validate_asset_links(
+            db,
+            tenant_id=current_user.tenant_id,
+            config_item_id=payload.config_item_id,
+            contract_id=payload.contract_id,
+        )
+        if "config_item_id" in payload.model_fields_set:
+            change.config_item_id = payload.config_item_id
+        if "contract_id" in payload.model_fields_set:
+            change.contract_id = payload.contract_id
 
     log_audit_event(
         db,
@@ -192,6 +239,12 @@ def update_change(
         resource_type="change_request",
         resource_id=change.id,
         event_data=payload.model_dump(exclude_none=True, mode="json"),
+    )
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="change.update",
     )
     db.commit()
     db.refresh(change)
@@ -242,6 +295,12 @@ def submit_change_for_approval(
         resource_type="change_request",
         resource_id=change.id,
     )
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type=action,
+    )
     db.commit()
     db.refresh(change)
     return change
@@ -285,6 +344,12 @@ def approve_or_reject_change(
         resource_type="change_request",
         resource_id=change.id,
         event_data={"approved": payload.approved},
+    )
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="change.approval",
     )
     db.commit()
     db.refresh(change)
@@ -334,6 +399,12 @@ def execute_runbook_for_change(
         resource_id=change.id,
         event_data={"runbook_id": runbook.id, "execution_status": change.execution_status},
     )
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="change.execute_runbook",
+    )
     db.commit()
     db.refresh(change)
     return change
@@ -365,6 +436,12 @@ def start_change(
         action="change.start",
         resource_type="change_request",
         resource_id=change.id,
+    )
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="change.start",
     )
     db.commit()
     db.refresh(change)
@@ -402,6 +479,12 @@ def complete_change(
         resource_type="change_request",
         resource_id=change.id,
         event_data={"rolled_back": payload.rolled_back},
+    )
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="change.complete",
     )
     db.commit()
     db.refresh(change)

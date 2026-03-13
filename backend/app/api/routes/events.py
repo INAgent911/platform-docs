@@ -7,6 +7,7 @@ from app.models import AlertEvent, Ticket, TicketPriority, User
 from app.schemas import AlertEventOut, CloudEventIn, TicketOut
 from app.services.audit import log_audit_event
 from app.services.operations import apply_ticket_sla, apply_ticket_status_markers, utc_now
+from app.services.usage import log_usage_event
 
 router = APIRouter()
 
@@ -31,6 +32,12 @@ def ingest_event(
     )
     db.add(event)
     db.flush()
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="event.ingest",
+    )
 
     if create_ticket:
         summary = payload.data.get("summary") if isinstance(payload.data, dict) else payload.subject or payload.type
@@ -90,6 +97,12 @@ def create_ticket_from_event(
     apply_ticket_status_markers(ticket)
     db.add(ticket)
     db.flush()
+    log_usage_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        event_type="event.ticket_create",
+    )
     log_audit_event(
         db,
         tenant_id=current_user.tenant_id,

@@ -8,11 +8,13 @@ from app.models import (
     CustomerStatus,
     IncidentSeverity,
     IncidentStatus,
+    ProvisioningStatus,
     SchemaMigrationAction,
     SchemaManifestStatus,
     SchemaStrategy,
     TicketPriority,
     TicketStatus,
+    ThemeMode,
     UserRole,
 )
 
@@ -111,6 +113,8 @@ class TicketCreate(BaseModel):
     title: str = Field(min_length=3, max_length=255)
     description: str | None = None
     customer_id: str | None = None
+    config_item_id: str | None = None
+    contract_id: str | None = None
     priority: TicketPriority = TicketPriority.P3
 
 
@@ -120,12 +124,16 @@ class TicketUpdate(BaseModel):
     status: TicketStatus | None = None
     priority: TicketPriority | None = None
     customer_id: str | None = None
+    config_item_id: str | None = None
+    contract_id: str | None = None
 
 
 class TicketOut(BaseModel):
     id: str
     tenant_id: str
     customer_id: str | None
+    config_item_id: str | None
+    contract_id: str | None
     title: str
     description: str | None
     status: TicketStatus
@@ -184,6 +192,8 @@ class IncidentCreate(BaseModel):
     is_major: bool = False
     ticket_id: str | None = None
     customer_id: str | None = None
+    config_item_id: str | None = None
+    contract_id: str | None = None
     assigned_user_id: str | None = None
     communication_interval_minutes: int | None = Field(default=None, ge=5, le=24 * 60)
 
@@ -194,6 +204,8 @@ class IncidentUpdate(BaseModel):
     severity: IncidentSeverity | None = None
     status: IncidentStatus | None = None
     is_major: bool | None = None
+    config_item_id: str | None = None
+    contract_id: str | None = None
     assigned_user_id: str | None = None
     communication_interval_minutes: int | None = Field(default=None, ge=5, le=24 * 60)
 
@@ -207,6 +219,8 @@ class IncidentOut(BaseModel):
     tenant_id: str
     ticket_id: str | None
     customer_id: str | None
+    config_item_id: str | None
+    contract_id: str | None
     title: str
     summary: str | None
     status: IncidentStatus
@@ -255,6 +269,8 @@ class ChangeRequestCreate(BaseModel):
     change_type: ChangeType = ChangeType.NORMAL
     risk_score: int = Field(default=5, ge=1, le=10)
     runbook_id: str | None = None
+    config_item_id: str | None = None
+    contract_id: str | None = None
     rollback_plan: str | None = None
     incident_id: str | None = None
     ticket_id: str | None = None
@@ -268,6 +284,8 @@ class ChangeRequestUpdate(BaseModel):
     change_type: ChangeType | None = None
     risk_score: int | None = Field(default=None, ge=1, le=10)
     runbook_id: str | None = None
+    config_item_id: str | None = None
+    contract_id: str | None = None
     rollback_plan: str | None = None
     incident_id: str | None = None
     ticket_id: str | None = None
@@ -290,6 +308,8 @@ class ChangeRequestOut(BaseModel):
     tenant_id: str
     incident_id: str | None
     ticket_id: str | None
+    config_item_id: str | None
+    contract_id: str | None
     title: str
     description: str | None
     change_type: ChangeType
@@ -310,6 +330,215 @@ class ChangeRequestOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ProvisioningJobCreate(BaseModel):
+    package_name: str = Field(default="core", min_length=1, max_length=120)
+    allowed_first_user_email: EmailStr | None = None
+
+
+class ProvisioningJobRetry(BaseModel):
+    reset_error: bool = True
+
+
+class ProvisioningJobOut(BaseModel):
+    id: str
+    tenant_id: str
+    requested_by_user_id: str
+    package_name: str
+    allowed_first_user_email: str | None
+    status: ProvisioningStatus
+    steps: list
+    error_message: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class UiSettingsUpdate(BaseModel):
+    theme_mode: ThemeMode
+    brand_name: str | None = Field(default=None, max_length=120)
+    primary_color: str = Field(default="#0b5fff", pattern=r"^#[0-9a-fA-F]{6}$")
+    secondary_color: str = Field(default="#00a389", pattern=r"^#[0-9a-fA-F]{6}$")
+    logo_url: str | None = Field(default=None, max_length=500)
+
+
+class UiSettingsOut(BaseModel):
+    id: str
+    tenant_id: str
+    theme_mode: ThemeMode
+    brand_name: str | None
+    primary_color: str
+    secondary_color: str
+    logo_url: str | None
+    updated_by_user_id: str
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class WorkspaceViewCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    role_scope: str = Field(pattern=r"^(owner|admin|user)$")
+    layout: dict = Field(default_factory=dict)
+    activate: bool = True
+
+
+class WorkspaceViewOut(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    role_scope: str
+    layout: dict
+    version: int
+    active: bool
+    created_by_user_id: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ConfigItemCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    item_type: str = Field(min_length=2, max_length=80)
+    environment: str | None = Field(default=None, max_length=80)
+    criticality: str | None = Field(default=None, max_length=40)
+
+
+class ConfigItemOut(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    item_type: str
+    environment: str | None
+    criticality: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ServiceContractCreate(BaseModel):
+    contract_code: str = Field(min_length=2, max_length=80)
+    customer_name: str = Field(min_length=2, max_length=255)
+    sla_tier: str = Field(min_length=2, max_length=80)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+
+
+class ServiceContractOut(BaseModel):
+    id: str
+    tenant_id: str
+    contract_code: str
+    customer_name: str
+    sla_tier: str
+    starts_at: datetime | None
+    ends_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class KnowledgeArticleCreate(BaseModel):
+    title: str = Field(min_length=3, max_length=255)
+    body: str = Field(min_length=10)
+    tags: list[str] = Field(default_factory=list)
+    known_error_code: str | None = Field(default=None, max_length=80)
+
+
+class KnowledgeArticleOut(BaseModel):
+    id: str
+    tenant_id: str
+    title: str
+    body: str
+    tags: list
+    known_error_code: str | None
+    created_by_user_id: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EntityKnowledgeLinkCreate(BaseModel):
+    entity_type: str = Field(pattern=r"^(ticket|incident)$")
+    entity_id: str = Field(min_length=36, max_length=36)
+    article_id: str = Field(min_length=36, max_length=36)
+
+
+class EntityKnowledgeLinkOut(BaseModel):
+    id: str
+    tenant_id: str
+    entity_type: str
+    entity_id: str
+    article_id: str
+    created_by_user_id: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AiCopilotRequest(BaseModel):
+    query: str = Field(min_length=3, max_length=2000)
+    include_closed: bool = False
+    max_results: int = Field(default=5, ge=1, le=20)
+
+
+class AiCopilotRecommendation(BaseModel):
+    title: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    rationale: str
+
+
+class AiCopilotResultOut(BaseModel):
+    root_cause_category: str
+    suggested_runbooks: list[str]
+    recommended_articles: list[KnowledgeArticleOut]
+    similar_tickets: list[TicketOut]
+    recommendations: list[AiCopilotRecommendation]
+
+
+class UsageEventOut(BaseModel):
+    id: str
+    tenant_id: str
+    actor_user_id: str | None
+    event_type: str
+    units: int
+    cost_estimate_usd_micros: int
+    event_metadata: dict
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class WorkflowTemplateOut(BaseModel):
+    id: str
+    name: str
+    description: str
+
+
+class WorkflowRunOut(BaseModel):
+    template_id: str
+    executed_at: datetime
+    summary: str
+    affected_records: int
+
+
+class OpsReportOut(BaseModel):
+    tickets_open: int
+    tickets_overdue: int
+    incidents_open: int
+    incidents_major_open: int
+    changes_pending_approval: int
+    changes_failed_or_rollback: int
+    mttr_minutes: int | None
+
+
+class UsageReportOut(BaseModel):
+    total_events: int
+    total_units: int
+    total_estimated_cost_usd: float
+    by_event_type: dict[str, int]
 
 
 class SchemaFieldDefinitionIn(BaseModel):
