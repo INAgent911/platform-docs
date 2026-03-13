@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import require_any_permission, require_permission
-from app.models import ChangeRequest, ChangeStatus, Incident, Ticket, User
+from app.models import ChangeRequest, ChangeStatus, ChangeType, Incident, Runbook, Ticket, User
 from app.schemas import (
     ChangeApprovalRequest,
     ChangeExecutionUpdate,
@@ -17,6 +17,43 @@ from app.schemas import (
 from app.services.audit import log_audit_event
 
 router = APIRouter()
+
+
+def _get_runbook(
+    db: Session,
+    current_user: User,
+    runbook_id: str | None,
+) -> Runbook | None:
+    if runbook_id is None:
+        return None
+    runbook = db.scalar(
+        select(Runbook).where(
+            Runbook.id == runbook_id,
+            Runbook.tenant_id == current_user.tenant_id,
+            Runbook.enabled.is_(True),
+        )
+    )
+    if runbook is None:
+        raise HTTPException(status_code=400, detail="Invalid or disabled runbook reference")
+    return runbook
+
+
+def _validate_change_policy(
+    *,
+    change_type: ChangeType,
+    risk_score: int,
+    rollback_plan: str | None,
+    runbook: Runbook | None,
+) -> None:
+    if change_type != ChangeType.STANDARD and runbook is not None:
+        raise HTTPException(status_code=400, detail="Runbooks can only be linked to standard changes")
+    if change_type in {ChangeType.NORMAL, ChangeType.EMERGENCY} and risk_score >= 7 and not rollback_plan:
+        raise HTTPException(
+            status_code=400,
+            detail="Rollback plan is required for high-risk normal/emergency changes",
+        )
+    if runbook is not None and not (runbook.min_risk_score <= risk_score <= runbook.max_risk_score):
+        raise HTTPException(status_code=400, detail="Risk score not allowed by selected runbook")
 
 
 @router.get("", response_model=list[ChangeRequestOut])
@@ -55,6 +92,13 @@ def create_change(
         )
         if incident is None:
             raise HTTPException(status_code=400, detail="Invalid incident reference")
+    runbook = _get_runbook(db, current_user, payload.runbook_id)
+    _validate_change_policy(
+        change_type=payload.change_type,
+        risk_score=payload.risk_score,
+        rollback_plan=payload.rollback_plan,
+        runbook=runbook,
+    )
 
     change = ChangeRequest(
         tenant_id=current_user.tenant_id,
@@ -64,9 +108,12 @@ def create_change(
         description=payload.description,
         change_type=payload.change_type,
         risk_score=payload.risk_score,
+        runbook_id=payload.runbook_id,
         rollback_plan=payload.rollback_plan,
         scheduled_start_at=payload.scheduled_start_at,
         scheduled_end_at=payload.scheduled_end_at,
+        automated_approval=False,
+        execution_status="not_executed",
         requested_by_user_id=current_user.id,
     )
     db.add(change)
@@ -78,7 +125,11 @@ def create_change(
         action="change.create",
         resource_type="change_request",
         resource_id=change.id,
-        event_data={"change_type": change.change_type.value, "risk_score": change.risk_score},
+        event_data={
+            "change_type": change.change_type.value,
+            "risk_score": change.risk_score,
+            "runbook_id": change.runbook_id,
+        },
     )
     db.commit()
     db.refresh(change)
@@ -116,6 +167,22 @@ def update_change(
         change.scheduled_end_at = payload.scheduled_end_at
     if payload.status is not None:
         change.status = payload.status
+    if payload.runbook_id is not None:
+        runbook = _get_runbook(db, current_user, payload.runbook_id)
+        _validate_change_policy(
+            change_type=payload.change_type or change.change_type,
+            risk_score=payload.risk_score or change.risk_score,
+            rollback_plan=payload.rollback_plan if payload.rollback_plan is not None else change.rollback_plan,
+            runbook=runbook,
+        )
+        change.runbook_id = payload.runbook_id
+    else:
+        _validate_change_policy(
+            change_type=payload.change_type or change.change_type,
+            risk_score=payload.risk_score or change.risk_score,
+            rollback_plan=payload.rollback_plan if payload.rollback_plan is not None else change.rollback_plan,
+            runbook=change.runbook,
+        )
 
     log_audit_event(
         db,
@@ -146,13 +213,32 @@ def submit_change_for_approval(
         raise HTTPException(status_code=404, detail="Change request not found")
     if change.status not in {ChangeStatus.DRAFT, ChangeStatus.REJECTED}:
         raise HTTPException(status_code=400, detail="Change request not in submittable state")
+    _validate_change_policy(
+        change_type=change.change_type,
+        risk_score=change.risk_score,
+        rollback_plan=change.rollback_plan,
+        runbook=change.runbook,
+    )
 
-    change.status = ChangeStatus.PENDING_APPROVAL
+    if (
+        change.change_type == ChangeType.STANDARD
+        and change.runbook is not None
+        and change.runbook.auto_approve_low_risk
+        and change.runbook.min_risk_score <= change.risk_score <= change.runbook.max_risk_score
+    ):
+        change.status = ChangeStatus.APPROVED
+        change.automated_approval = True
+        change.approval_notes = "Auto-approved by runbook low-risk policy"
+        action = "change.auto_approve"
+    else:
+        change.status = ChangeStatus.PENDING_APPROVAL
+        change.automated_approval = False
+        action = "change.submit_approval"
     log_audit_event(
         db,
         tenant_id=current_user.tenant_id,
         actor_user_id=current_user.id,
-        action="change.submit_approval",
+        action=action,
         resource_type="change_request",
         resource_id=change.id,
     )
@@ -177,10 +263,20 @@ def approve_or_reject_change(
         raise HTTPException(status_code=404, detail="Change request not found")
     if change.status != ChangeStatus.PENDING_APPROVAL:
         raise HTTPException(status_code=400, detail="Change request is not awaiting approval")
+    if payload.approved and current_user.id == change.requested_by_user_id:
+        raise HTTPException(status_code=403, detail="Requester cannot approve their own change")
+    if payload.approved:
+        _validate_change_policy(
+            change_type=change.change_type,
+            risk_score=change.risk_score,
+            rollback_plan=change.rollback_plan,
+            runbook=change.runbook,
+        )
 
     change.status = ChangeStatus.APPROVED if payload.approved else ChangeStatus.REJECTED
     change.approved_by_user_id = current_user.id
     change.approval_notes = payload.approval_notes
+    change.automated_approval = False
     log_audit_event(
         db,
         tenant_id=current_user.tenant_id,
@@ -189,6 +285,54 @@ def approve_or_reject_change(
         resource_type="change_request",
         resource_id=change.id,
         event_data={"approved": payload.approved},
+    )
+    db.commit()
+    db.refresh(change)
+    return change
+
+
+@router.post("/{change_id}/execute-runbook", response_model=ChangeRequestOut)
+def execute_runbook_for_change(
+    change_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("change.manage")),
+) -> ChangeRequestOut:
+    change = db.scalar(
+        select(ChangeRequest).where(
+            ChangeRequest.id == change_id, ChangeRequest.tenant_id == current_user.tenant_id
+        )
+    )
+    if change is None:
+        raise HTTPException(status_code=404, detail="Change request not found")
+    if change.change_type != ChangeType.STANDARD:
+        raise HTTPException(status_code=400, detail="Runbook execution only supports standard changes")
+    if change.status not in {ChangeStatus.APPROVED, ChangeStatus.IN_PROGRESS}:
+        raise HTTPException(status_code=400, detail="Standard change must be approved before execution")
+
+    runbook = _get_runbook(db, current_user, change.runbook_id)
+    if runbook is None:
+        raise HTTPException(status_code=400, detail="No runbook linked to this change")
+
+    executed_at = datetime.now(timezone.utc)
+    change.execution_status = "succeeded"
+    change.execution_output = (
+        f"Executed runbook '{runbook.name}' using template '{runbook.execution_template or 'default'}'"
+    )
+    change.executed_at = executed_at
+    change.status = ChangeStatus.COMPLETED
+    if change.scheduled_start_at is None:
+        change.scheduled_start_at = executed_at
+    if change.scheduled_end_at is None:
+        change.scheduled_end_at = executed_at
+
+    log_audit_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        action="change.execute_runbook",
+        resource_type="change_request",
+        resource_id=change.id,
+        event_data={"runbook_id": runbook.id, "execution_status": change.execution_status},
     )
     db.commit()
     db.refresh(change)
@@ -245,8 +389,11 @@ def complete_change(
         raise HTTPException(status_code=400, detail="Change request must be in progress")
 
     change.status = ChangeStatus.ROLLED_BACK if payload.rolled_back else ChangeStatus.COMPLETED
+    change.execution_status = "rolled_back" if payload.rolled_back else "succeeded"
     if change.scheduled_end_at is None:
         change.scheduled_end_at = datetime.now(timezone.utc)
+    if change.executed_at is None:
+        change.executed_at = change.scheduled_end_at
     log_audit_event(
         db,
         tenant_id=current_user.tenant_id,
@@ -259,4 +406,3 @@ def complete_change(
     db.commit()
     db.refresh(change)
     return change
-

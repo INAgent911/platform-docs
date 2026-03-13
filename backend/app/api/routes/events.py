@@ -6,6 +6,7 @@ from app.deps import require_permission
 from app.models import AlertEvent, Ticket, TicketPriority, User
 from app.schemas import AlertEventOut, CloudEventIn, TicketOut
 from app.services.audit import log_audit_event
+from app.services.operations import apply_ticket_sla, apply_ticket_status_markers, utc_now
 
 router = APIRouter()
 
@@ -39,16 +40,18 @@ def ingest_event(
             description=f"Auto-created from event {payload.id}",
             priority=TicketPriority.P2 if severity in {"critical", "high"} else TicketPriority.P3,
         )
+        apply_ticket_sla(ticket, base_time=utc_now())
+        apply_ticket_status_markers(ticket)
         db.add(ticket)
         db.flush()
         log_audit_event(
             db,
             tenant_id=current_user.tenant_id,
             actor_user_id=current_user.id,
-        action="event.ticket_auto_create",
-        resource_type="ticket",
-        resource_id=ticket.id,
-        event_data={"event_id": event.id},
+            action="event.ticket_auto_create",
+            resource_type="ticket",
+            resource_id=ticket.id,
+            event_data={"event_id": event.id},
         )
 
     log_audit_event(
@@ -83,6 +86,8 @@ def create_ticket_from_event(
         description=f"Linked event: {event.external_event_id}",
         priority=TicketPriority.P2 if severity in {"critical", "high"} else TicketPriority.P3,
     )
+    apply_ticket_sla(ticket, base_time=utc_now())
+    apply_ticket_status_markers(ticket)
     db.add(ticket)
     db.flush()
     log_audit_event(

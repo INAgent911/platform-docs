@@ -169,6 +169,143 @@ def _migration_normalize_role_permissions(conn: Connection) -> None:
                 )
 
 
+def _add_column_if_missing(
+    conn: Connection,
+    *,
+    table_name: str,
+    column_name: str,
+    postgres_sql: str,
+    other_sql: str,
+) -> None:
+    inspector = inspect(conn)
+    if table_name not in inspector.get_table_names():
+        return
+    existing_columns = {col["name"] for col in inspector.get_columns(table_name)}
+    if column_name in existing_columns:
+        return
+    if conn.dialect.name == "postgresql":
+        conn.execute(text(postgres_sql))
+    else:
+        conn.execute(text(other_sql))
+
+
+def _migration_add_ops_sla_and_runbooks(conn: Connection) -> None:
+    _add_column_if_missing(
+        conn,
+        table_name="tickets",
+        column_name="first_responded_at",
+        postgres_sql="ALTER TABLE tickets ADD COLUMN IF NOT EXISTS first_responded_at TIMESTAMPTZ",
+        other_sql="ALTER TABLE tickets ADD COLUMN first_responded_at TIMESTAMP",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="tickets",
+        column_name="response_due_at",
+        postgres_sql="ALTER TABLE tickets ADD COLUMN IF NOT EXISTS response_due_at TIMESTAMPTZ",
+        other_sql="ALTER TABLE tickets ADD COLUMN response_due_at TIMESTAMP",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="tickets",
+        column_name="resolved_at",
+        postgres_sql="ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ",
+        other_sql="ALTER TABLE tickets ADD COLUMN resolved_at TIMESTAMP",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="tickets",
+        column_name="resolve_due_at",
+        postgres_sql="ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolve_due_at TIMESTAMPTZ",
+        other_sql="ALTER TABLE tickets ADD COLUMN resolve_due_at TIMESTAMP",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="tickets",
+        column_name="escalated_at",
+        postgres_sql="ALTER TABLE tickets ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ",
+        other_sql="ALTER TABLE tickets ADD COLUMN escalated_at TIMESTAMP",
+    )
+
+    _add_column_if_missing(
+        conn,
+        table_name="incidents",
+        column_name="last_communication_at",
+        postgres_sql="ALTER TABLE incidents ADD COLUMN IF NOT EXISTS last_communication_at TIMESTAMPTZ",
+        other_sql="ALTER TABLE incidents ADD COLUMN last_communication_at TIMESTAMP",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="incidents",
+        column_name="next_communication_due_at",
+        postgres_sql="ALTER TABLE incidents ADD COLUMN IF NOT EXISTS next_communication_due_at TIMESTAMPTZ",
+        other_sql="ALTER TABLE incidents ADD COLUMN next_communication_due_at TIMESTAMP",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="incidents",
+        column_name="resolved_at",
+        postgres_sql="ALTER TABLE incidents ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ",
+        other_sql="ALTER TABLE incidents ADD COLUMN resolved_at TIMESTAMP",
+    )
+
+    _add_column_if_missing(
+        conn,
+        table_name="change_requests",
+        column_name="runbook_id",
+        postgres_sql="ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS runbook_id VARCHAR(36)",
+        other_sql="ALTER TABLE change_requests ADD COLUMN runbook_id VARCHAR(36)",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="change_requests",
+        column_name="automated_approval",
+        postgres_sql="ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS automated_approval BOOLEAN NOT NULL DEFAULT FALSE",
+        other_sql="ALTER TABLE change_requests ADD COLUMN automated_approval BOOLEAN NOT NULL DEFAULT 0",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="change_requests",
+        column_name="execution_status",
+        postgres_sql="ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS execution_status VARCHAR(40) NOT NULL DEFAULT 'not_executed'",
+        other_sql="ALTER TABLE change_requests ADD COLUMN execution_status VARCHAR(40) NOT NULL DEFAULT 'not_executed'",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="change_requests",
+        column_name="execution_output",
+        postgres_sql="ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS execution_output TEXT",
+        other_sql="ALTER TABLE change_requests ADD COLUMN execution_output TEXT",
+    )
+    _add_column_if_missing(
+        conn,
+        table_name="change_requests",
+        column_name="executed_at",
+        postgres_sql="ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS executed_at TIMESTAMPTZ",
+        other_sql="ALTER TABLE change_requests ADD COLUMN executed_at TIMESTAMP",
+    )
+
+    conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS runbooks (
+                id VARCHAR(36) PRIMARY KEY,
+                tenant_id VARCHAR(36) NOT NULL,
+                name VARCHAR(120) NOT NULL,
+                description TEXT NULL,
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                auto_approve_low_risk BOOLEAN NOT NULL DEFAULT FALSE,
+                min_risk_score INTEGER NOT NULL DEFAULT 1,
+                max_risk_score INTEGER NOT NULL DEFAULT 3,
+                execution_template TEXT NULL,
+                created_by_user_id VARCHAR(36) NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_runbook_name UNIQUE (tenant_id, name)
+            )
+            """
+        )
+    )
+
+
 MIGRATIONS: list[Migration] = [
     Migration(
         version="20260313_001_add_mfa_column",
@@ -184,6 +321,11 @@ MIGRATIONS: list[Migration] = [
         version="20260313_003_normalize_role_permission_roles",
         description="Normalize RBAC role values to enum names",
         apply_fn=_migration_normalize_role_permissions,
+    ),
+    Migration(
+        version="20260313_004_ops_sla_and_runbooks",
+        description="Add SLA fields and runbook automation schema",
+        apply_fn=_migration_add_ops_sla_and_runbooks,
     ),
 ]
 

@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.deps import require_any_permission, require_permission
 from app.models import Customer, Ticket, TicketStatus, User
-from app.schemas import TicketCreate, TicketOut, TicketUpdate
+from app.schemas import TicketCreate, TicketOut, TicketSlaOut, TicketUpdate
 from app.services.audit import log_audit_event
+from app.services.operations import apply_ticket_sla, apply_ticket_status_markers, ticket_sla_state, utc_now
 
 router = APIRouter()
 
@@ -45,6 +46,8 @@ def create_ticket(
         customer_id=payload.customer_id,
         priority=payload.priority,
     )
+    apply_ticket_sla(ticket, base_time=utc_now())
+    apply_ticket_status_markers(ticket)
     db.add(ticket)
     db.flush()
     log_audit_event(
@@ -89,6 +92,12 @@ def update_ticket(
         ticket.status = payload.status
     if payload.priority is not None:
         ticket.priority = payload.priority
+        apply_ticket_sla(ticket, base_time=ticket.created_at or utc_now())
+
+    apply_ticket_status_markers(ticket)
+    state = ticket_sla_state(ticket)
+    if state["is_escalated"] and ticket.escalated_at is None:
+        ticket.escalated_at = utc_now()
 
     log_audit_event(
         db,
@@ -97,7 +106,32 @@ def update_ticket(
         action="ticket.update",
         resource_type="ticket",
         resource_id=ticket.id,
+        event_data={"status": ticket.status.value, "priority": ticket.priority.value, "sla": state},
     )
     db.commit()
     db.refresh(ticket)
     return ticket
+
+
+@router.get("/{ticket_id}/sla", response_model=TicketSlaOut)
+def get_ticket_sla(
+    ticket_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_any_permission("ticket.read", "ticket.manage")),
+) -> TicketSlaOut:
+    ticket = db.scalar(select(Ticket).where(Ticket.id == ticket_id, Ticket.tenant_id == current_user.tenant_id))
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    state = ticket_sla_state(ticket)
+    return TicketSlaOut(
+        ticket_id=ticket.id,
+        response_due_at=ticket.response_due_at,
+        resolve_due_at=ticket.resolve_due_at,
+        first_responded_at=ticket.first_responded_at,
+        resolved_at=ticket.resolved_at,
+        escalated_at=ticket.escalated_at,
+        response_breached=state["response_breached"],
+        resolution_breached=state["resolution_breached"],
+        is_escalated=state["is_escalated"],
+    )

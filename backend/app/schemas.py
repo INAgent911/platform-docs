@@ -130,9 +130,26 @@ class TicketOut(BaseModel):
     description: str | None
     status: TicketStatus
     priority: TicketPriority
+    first_responded_at: datetime | None
+    response_due_at: datetime | None
+    resolved_at: datetime | None
+    resolve_due_at: datetime | None
+    escalated_at: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class TicketSlaOut(BaseModel):
+    ticket_id: str
+    response_due_at: datetime | None
+    resolve_due_at: datetime | None
+    first_responded_at: datetime | None
+    resolved_at: datetime | None
+    escalated_at: datetime | None
+    response_breached: bool
+    resolution_breached: bool
+    is_escalated: bool
 
 
 class CloudEventIn(BaseModel):
@@ -168,7 +185,7 @@ class IncidentCreate(BaseModel):
     ticket_id: str | None = None
     customer_id: str | None = None
     assigned_user_id: str | None = None
-    communication_interval_minutes: int = Field(default=60, ge=5, le=240)
+    communication_interval_minutes: int | None = Field(default=None, ge=5, le=24 * 60)
 
 
 class IncidentUpdate(BaseModel):
@@ -178,7 +195,11 @@ class IncidentUpdate(BaseModel):
     status: IncidentStatus | None = None
     is_major: bool | None = None
     assigned_user_id: str | None = None
-    communication_interval_minutes: int | None = Field(default=None, ge=5, le=240)
+    communication_interval_minutes: int | None = Field(default=None, ge=5, le=24 * 60)
+
+
+class IncidentCommunicationUpdate(BaseModel):
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class IncidentOut(BaseModel):
@@ -193,9 +214,37 @@ class IncidentOut(BaseModel):
     is_major: bool
     assigned_user_id: str | None
     communication_interval_minutes: int
+    last_communication_at: datetime | None
+    next_communication_due_at: datetime | None
+    resolved_at: datetime | None
     created_by_user_id: str
     created_at: datetime
     updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RunbookCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    description: str | None = None
+    auto_approve_low_risk: bool = False
+    min_risk_score: int = Field(default=1, ge=1, le=10)
+    max_risk_score: int = Field(default=3, ge=1, le=10)
+    execution_template: str | None = None
+
+
+class RunbookOut(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    description: str | None
+    enabled: bool
+    auto_approve_low_risk: bool
+    min_risk_score: int
+    max_risk_score: int
+    execution_template: str | None
+    created_by_user_id: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -205,6 +254,7 @@ class ChangeRequestCreate(BaseModel):
     description: str | None = None
     change_type: ChangeType = ChangeType.NORMAL
     risk_score: int = Field(default=5, ge=1, le=10)
+    runbook_id: str | None = None
     rollback_plan: str | None = None
     incident_id: str | None = None
     ticket_id: str | None = None
@@ -217,6 +267,7 @@ class ChangeRequestUpdate(BaseModel):
     description: str | None = None
     change_type: ChangeType | None = None
     risk_score: int | None = Field(default=None, ge=1, le=10)
+    runbook_id: str | None = None
     rollback_plan: str | None = None
     incident_id: str | None = None
     ticket_id: str | None = None
@@ -244,6 +295,11 @@ class ChangeRequestOut(BaseModel):
     change_type: ChangeType
     status: ChangeStatus
     risk_score: int
+    runbook_id: str | None
+    automated_approval: bool
+    execution_status: str
+    execution_output: str | None
+    executed_at: datetime | None
     rollback_plan: str | None
     scheduled_start_at: datetime | None
     scheduled_end_at: datetime | None

@@ -49,6 +49,7 @@ class Tenant(Base):
     change_requests: Mapped[list["ChangeRequest"]] = relationship(
         back_populates="tenant", cascade="all, delete-orphan"
     )
+    runbooks: Mapped[list["Runbook"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     schema_manifests: Mapped[list["SchemaManifest"]] = relationship(
         back_populates="tenant", cascade="all, delete-orphan"
     )
@@ -119,6 +120,11 @@ class Ticket(Base):
     priority: Mapped[TicketPriority] = mapped_column(
         Enum(TicketPriority), nullable=False, default=TicketPriority.P3
     )
+    first_responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    response_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolve_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     tenant: Mapped[Tenant] = relationship(back_populates="tickets")
@@ -279,6 +285,11 @@ class Incident(Base):
     is_major: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
     assigned_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     communication_interval_minutes: Mapped[int] = mapped_column(Integer(), nullable=False, default=60)
+    last_communication_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_communication_due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by_user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -308,6 +319,26 @@ class ChangeStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class Runbook(Base):
+    __tablename__ = "runbooks"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_runbook_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=True)
+    auto_approve_low_risk: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    min_risk_score: Mapped[int] = mapped_column(Integer(), nullable=False, default=1)
+    max_risk_score: Mapped[int] = mapped_column(Integer(), nullable=False, default=3)
+    execution_template: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    created_by_user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="runbooks")
+    change_requests: Mapped[list["ChangeRequest"]] = relationship(back_populates="runbook")
+
+
 class ChangeRequest(Base):
     __tablename__ = "change_requests"
 
@@ -320,6 +351,11 @@ class ChangeRequest(Base):
     change_type: Mapped[ChangeType] = mapped_column(Enum(ChangeType), nullable=False, default=ChangeType.NORMAL)
     status: Mapped[ChangeStatus] = mapped_column(Enum(ChangeStatus), nullable=False, default=ChangeStatus.DRAFT)
     risk_score: Mapped[int] = mapped_column(Integer(), nullable=False, default=5)
+    runbook_id: Mapped[str | None] = mapped_column(ForeignKey("runbooks.id"), nullable=True, index=True)
+    automated_approval: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    execution_status: Mapped[str] = mapped_column(String(40), nullable=False, default="not_executed")
+    execution_output: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rollback_plan: Mapped[str | None] = mapped_column(Text(), nullable=True)
     scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scheduled_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -334,3 +370,4 @@ class ChangeRequest(Base):
     tenant: Mapped[Tenant] = relationship(back_populates="change_requests")
     incident: Mapped[Incident | None] = relationship(back_populates="change_requests")
     ticket: Mapped[Ticket | None] = relationship(back_populates="change_requests")
+    runbook: Mapped[Runbook | None] = relationship(back_populates="change_requests")

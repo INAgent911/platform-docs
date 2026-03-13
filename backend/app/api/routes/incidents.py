@@ -5,8 +5,14 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.deps import require_any_permission, require_permission
 from app.models import Customer, Incident, IncidentSeverity, IncidentStatus, Ticket, User
-from app.schemas import IncidentCreate, IncidentOut, IncidentUpdate
+from app.schemas import IncidentCommunicationUpdate, IncidentCreate, IncidentOut, IncidentUpdate
 from app.services.audit import log_audit_event
+from app.services.operations import (
+    apply_incident_status_markers,
+    incident_default_comm_interval,
+    sync_incident_communication_due,
+    utc_now,
+)
 
 router = APIRouter()
 
@@ -57,9 +63,12 @@ def create_incident(
         status=payload.status,
         is_major=payload.is_major,
         assigned_user_id=payload.assigned_user_id,
-        communication_interval_minutes=payload.communication_interval_minutes,
+        communication_interval_minutes=payload.communication_interval_minutes
+        or incident_default_comm_interval(payload.severity),
         created_by_user_id=current_user.id,
     )
+    apply_incident_status_markers(incident)
+    sync_incident_communication_due(incident, now=utc_now())
     db.add(incident)
     db.flush()
     log_audit_event(
@@ -95,6 +104,8 @@ def update_incident(
         incident.summary = payload.summary
     if payload.severity is not None:
         incident.severity = payload.severity
+        if payload.communication_interval_minutes is None:
+            incident.communication_interval_minutes = incident_default_comm_interval(payload.severity)
     if payload.status is not None:
         incident.status = payload.status
     if payload.is_major is not None:
@@ -103,6 +114,8 @@ def update_incident(
         incident.assigned_user_id = payload.assigned_user_id
     if payload.communication_interval_minutes is not None:
         incident.communication_interval_minutes = payload.communication_interval_minutes
+    apply_incident_status_markers(incident)
+    sync_incident_communication_due(incident, now=utc_now())
 
     log_audit_event(
         db,
@@ -117,3 +130,39 @@ def update_incident(
     db.refresh(incident)
     return incident
 
+
+@router.post("/{incident_id}/communications", response_model=IncidentOut)
+def log_incident_communication(
+    incident_id: str,
+    payload: IncidentCommunicationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("incident.manage")),
+) -> IncidentOut:
+    incident = db.scalar(
+        select(Incident).where(Incident.id == incident_id, Incident.tenant_id == current_user.tenant_id)
+    )
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    communication_at = utc_now()
+    incident.last_communication_at = communication_at
+    sync_incident_communication_due(incident, now=communication_at)
+
+    log_audit_event(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        action="incident.communication",
+        resource_type="incident",
+        resource_id=incident.id,
+        event_data={
+            "note": payload.note,
+            "last_communication_at": communication_at.isoformat(),
+            "next_communication_due_at": incident.next_communication_due_at.isoformat()
+            if incident.next_communication_due_at
+            else None,
+        },
+    )
+    db.commit()
+    db.refresh(incident)
+    return incident
